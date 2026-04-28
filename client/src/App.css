@@ -78,7 +78,7 @@ body {
 .app {
   height: 100vh;
   display: grid;
-  grid-template-rows: 52px 1fr 36px;
+  grid-template-rows: 52px 1fr;
   grid-template-columns: 1fr;
 }
 
@@ -168,17 +168,6 @@ body {
   50% { opacity: 0.4; transform: scale(0.7); }
 }
 
-.docs-link {
-  font-size: 13px;
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: color 0.15s ease;
-}
-
-.docs-link:hover {
-  color: var(--text-primary);
-  text-decoration: underline;
-}
 
 /* --- Layout --- */
 .app-layout {
@@ -869,26 +858,3 @@ input[type=range]::-webkit-slider-thumb {
   font-size: 11px;
 }
 
-/* --- Statusbar --- */
-.statusbar {
-  height: 36px;
-  background: var(--bg-base);
-  border-top: 1px solid var(--border-subtle);
-  display: flex;
-  align-items: center;
-  padding: 0 24px;
-  gap: 24px;
-}
-
-.status-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.status-item strong {
-  color: var(--text-secondary);
-  font-weight: 500;
-}

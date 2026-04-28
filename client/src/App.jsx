@@ -167,7 +167,6 @@ function App() {
             <div className={`status-dot ${isRunning ? 'running' : 'ready'}`}></div>
             {isRunning ? 'Running' : 'Ready'}
           </div>
-          <a href="#" className="docs-link">API Docs ↗</a>
         </div>
       </header>
 
@@ -406,18 +405,6 @@ function App() {
         </main>
       </div>
 
-      {/* --- Statusbar --- */}
-      <footer className="statusbar">
-        <div className="status-item">
-          RUNS TODAY: <strong>12</strong>
-        </div>
-        <div className="status-item">
-          LAST RUN: <strong>{status?.timestamp ? new Date(status.timestamp).toLocaleTimeString() : 'N/A'}</strong>
-        </div>
-        <div className="status-item">
-          RECORDS FOUND: <strong>{results.length}</strong>
-        </div>
-      </footer>
     </div>
   );
 }
