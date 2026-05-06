@@ -452,7 +452,7 @@ function App() {
                       className={`mp-tab ${collectMarketplaces.includes(mp) ? 'active' : ''}`}
                       onClick={() => toggleCollectMarketplace(mp)}
                     >
-                      {MP_FLAGS[mp]} {mp}
+                      {mp}
                     </button>
                   ))}
                 </div>
@@ -525,7 +525,15 @@ function App() {
               <div className="panel-section">
                 <div className="option-row">
                   <div className="option-label">Max ASINs per category</div>
-                  <div className="option-control">
+                  <button
+                    className={`unlimited-toggle ${maxPerCategory === 0 ? 'active' : ''}`}
+                    onClick={() => setMaxPerCategory(maxPerCategory === 0 ? 50 : 0)}
+                  >
+                    {maxPerCategory === 0 ? '∞ Unlimited' : 'Set limit'}
+                  </button>
+                </div>
+                {maxPerCategory !== 0 ? (
+                  <div className="option-control" style={{marginTop: 6}}>
                     <input
                       type="range" min="10" max="500" step="10"
                       value={maxPerCategory}
@@ -533,7 +541,9 @@ function App() {
                     />
                     <div className="option-value">{maxPerCategory}</div>
                   </div>
-                </div>
+                ) : (
+                  <div className="unlimited-hint">Scrapes all pages until the last result</div>
+                )}
               </div>
 
               <button
@@ -546,7 +556,7 @@ function App() {
                 ) : isCollectDone ? (
                   <>✓ Collected {collectedAsins.length} ASINs</>
                 ) : (
-                  <>🔍 Collect ASINs ({selectedCategories.length} {selectedCategories.length === 1 ? 'category' : 'categories'})</>
+                  <>Collect ASINs ({selectedCategories.length} {selectedCategories.length === 1 ? 'category' : 'categories'})</>
                 )}
               </button>
             </aside>
@@ -683,7 +693,7 @@ function App() {
                       className={`mp-tab ${scrapeMarketplaces.includes(mp) ? 'active' : ''}`}
                       onClick={() => toggleScrapeMarketplace(mp)}
                     >
-                      {MP_FLAGS[mp]} {mp}
+                      {mp}
                     </button>
                   ))}
                 </div>
@@ -762,7 +772,7 @@ function App() {
                 ) : status?.status === 'COMPLETED' ? (
                   <>✓ Complete — {results.length} found</>
                 ) : (
-                  <>🔍 Scrape Seller Info</>
+                  <>Scrape Seller Info</>
                 )}
               </button>
             </aside>

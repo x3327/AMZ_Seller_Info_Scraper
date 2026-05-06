@@ -1,0 +1,854 @@
+{
+  "name": "Amazon Seller Intel — Telegram Automation",
+  "nodes": [
+
+    {
+      "parameters": { "content": "# Amazon Seller Intel — Telegram Bot\n\n**Credentials required (match names exactly):**\n- `Telegram Bot` → Telegram API\n- `Apify API Key` → Header Auth: `Authorization: Bearer apify_api_xxx`\n- `Google Drive` → Google Drive OAuth2\n- `Google Sheets` → Google Sheets OAuth2\n\n**No local server needed** — browse nodes fetched directly from Google Sheets.\n\n**Commands:**\n```\ncollect asins Baby Accessories ES\ncollect asins Women Swimwear UK\nscrape sellers\nstatus\nhelp\n```\n\n**Flow:**\n1. collect asins → Apify scrapes → notifies when done\n2. scrape sellers → Apify scrapes → saves to Google Drive\n\n**Google Drive folders created automatically:**\nMain Category → Sub-Category → Seller Data Sheet", "height": 400, "width": 440, "color": 7 },
+      "id": "sticky-setup",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-480, 120]
+    },
+
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "node-01",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [80, 320],
+      "webhookId": "amazon-seller-intel-bot",
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const msg = $input.first().json.message;\nconst text = (msg?.text || '').trim();\nconst chatId = String(msg?.chat?.id || '');\nconst staticData = $getWorkflowStaticData('global');\n\nlet intent = 'help';\nlet categoryQuery = '';\nlet marketplace = 'ES';\n\nif (/collect\\s*asin|scrape\\s*asin|get\\s*asin|start\\s*asin|find\\s*asin/i.test(text)) {\n  intent = 'collect_asins';\n  categoryQuery = text\n    .replace(/collect\\s*asins?|scrape\\s*asins?|get\\s*asins?|start\\s*asin\\s*collection|find\\s*asins?/gi, '')\n    .replace(/\\bfrom\\b|\\bof\\b|\\bfor\\b|\\bin\\b/gi, '')\n    .replace(/\\b(ES|UK|DE|FR|IT)\\b/gi, '')\n    .replace(/[>]/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n} else if (/scrape\\s*seller|seller\\s*data|seller\\s*info|start\\s*seller|seller\\s*scrap/i.test(text)) {\n  intent = 'scrape_sellers';\n} else if (/status|progress/i.test(text)) {\n  intent = 'status';\n}\n\nconst mpMatch = text.match(/\\b(ES|UK|DE|FR|IT)\\b/i);\nif (mpMatch) marketplace = mpMatch[1].toUpperCase();\n\nconst session = staticData[chatId] || {};\n\nreturn [{ json: { intent, categoryQuery, marketplace, chatId, originalText: text, session } }];"
+      },
+      "id": "node-02",
+      "name": "Parse Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, 320]
+    },
+
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [{ "id": "c1", "leftValue": "={{ $json.intent }}", "rightValue": "collect_asins", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Collect ASINs"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [{ "id": "c2", "leftValue": "={{ $json.intent }}", "rightValue": "scrape_sellers", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Scrape Sellers"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [{ "id": "c3", "leftValue": "={{ $json.intent }}", "rightValue": "status", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Status"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "node-03",
+      "name": "Route by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [520, 320]
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Message').item.json.chatId }}",
+        "text": "🤖 *Amazon Seller Intel Bot*\n\nAvailable commands:\n\n📦 *Collect ASINs:*\n`collect asins Baby Accessories ES`\n`collect asins Women Swimwear UK`\n\n🔎 *Scrape Seller Data:*\n`scrape sellers`\n_(Run after collecting ASINs)_\n\n📊 *Check Status:*\n`status`\n\n_Marketplace codes: ES UK DE FR IT_",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "node-04",
+      "name": "Send Help",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [740, 500],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Message').item.json.chatId }}",
+        "text": "={{ '📊 *Session Status*\\n\\n' + (Object.keys($(\\'Parse Message\\').item.json.session).length > 0 ? '✅ ASINs stored: ' + ($(\\'Parse Message\\').item.json.session.asinCount || 0) + '\\nCategory: ' + ($(\\'Parse Message\\').item.json.session.categoryQuery || 'N/A') + '\\nMarketplace: ' + ($(\\'Parse Message\\').item.json.session.marketplace || 'N/A') + '\\n\\nSend `scrape sellers` to continue.' : '⚠️ No session data. Send a collect command first.') }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "node-04b",
+      "name": "Send Status",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [740, 640],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://docs.google.com/spreadsheets/d/1MQxW_eRKClhXx1PI-OccrQoAtIehWhiR/export?format=csv&gid=1914657032",
+        "options": { "timeout": 20000 }
+      },
+      "id": "node-05",
+      "name": "Fetch Browse Nodes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 160]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Parse CSV from Google Sheets and filter by query\nconst resp = $('Fetch Browse Nodes').item.json;\nlet csvText = '';\nif (typeof resp === 'string') {\n  csvText = resp;\n} else if (typeof resp.data === 'string') {\n  csvText = resp.data;\n} else if (typeof resp.body === 'string') {\n  csvText = resp.body;\n} else {\n  csvText = JSON.stringify(resp);\n}\n\nconst query = ($('Parse Message').item.json.categoryQuery || '').toLowerCase().trim();\nconst marketplace = $('Parse Message').item.json.marketplace || 'ES';\nconst chatId = $('Parse Message').item.json.chatId;\n\nif (!csvText || !query) {\n  return [{ json: { matched: [], query, marketplace, chatId, count: 0, error: query ? 'No CSV data' : 'Empty query' } }];\n}\n\nconst lines = csvText.replace(/\\r/g, '').split('\\n').filter(l => l.trim());\nconst allNodes = [];\nconst seen = new Set();\n\nfor (let i = 1; i < lines.length; i++) {\n  const cols = [];\n  let cur = '', inQ = false;\n  for (const ch of lines[i]) {\n    if (ch === '\"') { inQ = !inQ; }\n    else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }\n    else { cur += ch; }\n  }\n  cols.push(cur.trim());\n\n  const esId = (cols[1] || '').trim();\n  const englishPath = (cols[5] || '').trim();\n  if (!esId || !englishPath || seen.has(esId)) continue;\n  seen.add(esId);\n\n  const parts = englishPath.split(' > ').filter(Boolean);\n  allNodes.push({\n    id: esId,\n    name: parts[parts.length - 1] || englishPath,\n    path: englishPath,\n    nodes: {\n      ES: esId || null,\n      UK: (cols[6] || '').trim() || null,\n      DE: (cols[7] || '').trim() || null,\n      FR: (cols[8] || '').trim() || null,\n      IT: (cols[9] || '').trim() || null\n    }\n  });\n}\n\nconst queryParts = query.split(/\\s+/).filter(Boolean);\nconst scored = allNodes\n  .filter(n => n.nodes && n.nodes[marketplace])\n  .map(n => {\n    const pl = (n.path || '').toLowerCase();\n    const nl = (n.name || '').toLowerCase();\n    let score = 0;\n    for (const p of queryParts) {\n      if (nl.includes(p)) score += 3;\n      if (pl.includes(p)) score += 1;\n    }\n    return { node: n, score };\n  })\n  .filter(s => s.score > 0)\n  .sort((a, b) => b.score - a.score)\n  .slice(0, 20)\n  .map(s => s.node);\n\nreturn [{ json: { matched: scored, query, marketplace, chatId, count: scored.length } }];"
+      },
+      "id": "node-06",
+      "name": "Find Matching Nodes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 160]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "hc1", "leftValue": "={{ $json.count }}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-07",
+      "name": "Has Matching Nodes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1180, 160]
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ '❌ No categories found for: *' + $json.query + '* on ' + $json.marketplace + '\\n\\nTry: Baby, Women, Men, Girls, Accessories, Swimwear, etc.' }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "node-08",
+      "name": "No Categories Found",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1400, 300],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ '🔄 Starting ASIN collection...\\n\\n📂 Categories found: *' + $json.count + '*\\n🌍 Marketplace: *' + $json.marketplace + '*\\n🔍 Query: *' + $json.query + '*\\n\\n_This may take several minutes. I\\'ll notify you when done._' }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "node-09",
+      "name": "Notify Collection Starting",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1400, 40],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const { matched, marketplace, chatId, query } = $input.first().json;\nconst MP_DOMAINS = { ES: 'amazon.es', UK: 'amazon.co.uk', DE: 'amazon.de', FR: 'amazon.fr', IT: 'amazon.it' };\nconst MP_COUNTRIES = { ES: 'ES', UK: 'GB', DE: 'DE', FR: 'FR', IT: 'IT' };\nconst domain = MP_DOMAINS[marketplace] || 'amazon.es';\nconst country = MP_COUNTRIES[marketplace] || 'ES';\n\nconst categoryUrls = matched.map(n => ({\n  url: 'https://www.' + domain + '/s?rh=n:' + n.nodes[marketplace] + '&language=en',\n  userData: { categoryName: n.name, categoryPath: n.path, nodeId: n.id }\n}));\n\nreturn [{ json: {\n  actorInput: {\n    categoryOrProductUrls: categoryUrls,\n    proxyCountry: country,\n    maxItems: 200,\n    scrapeSellers: false\n  },\n  marketplace, chatId, query,\n  categoryCount: matched.length,\n  categories: matched.map(n => ({ id: n.id, name: n.name, path: n.path }))\n} }];"
+      },
+      "id": "node-09b",
+      "name": "Build ASIN Actor Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1620, 40]
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/junglee~amazon-crawler/runs",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify($json.actorInput) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "node-10",
+      "name": "Start ASIN Actor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1840, 40],
+      "credentials": { "httpHeaderAuth": { "id": "2", "name": "Apify API Key" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const runData = $('Start ASIN Actor').item.json;\nconst prev = $('Build ASIN Actor Input').item.json;\nconst runId = runData?.data?.id;\nif (!runId) throw new Error('Apify did not return a run ID: ' + JSON.stringify(runData));\nreturn [{ json: { runId, marketplace: prev.marketplace, chatId: prev.chatId, query: prev.query, categories: prev.categories, pollCount: 0 } }];"
+      },
+      "id": "node-10b",
+      "name": "Extract ASIN Run ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2060, 40]
+    },
+
+    {
+      "parameters": { "amount": 45, "unit": "seconds" },
+      "id": "node-12",
+      "name": "Wait 45s — ASIN",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2280, 40]
+    },
+
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.apify.com/v2/actor-runs/' + $json.runId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "node-13",
+      "name": "Check ASIN Run Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2500, 40],
+      "credentials": { "httpHeaderAuth": { "id": "2", "name": "Apify API Key" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const runStatus = $('Check ASIN Run Status').item.json?.data?.status || 'UNKNOWN';\nconst ctx = $('Wait 45s — ASIN').item.json;\nconst pollCount = (ctx.pollCount || 0) + 1;\nconst timedOut = pollCount >= 40;\nconst isDone = ['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'].includes(runStatus) || timedOut;\nreturn [{ json: {\n  runId: ctx.runId,\n  chatId: ctx.chatId,\n  query: ctx.query,\n  categories: ctx.categories,\n  marketplace: ctx.marketplace,\n  runStatus,\n  pollCount,\n  statusLabel: isDone ? 'done' : 'pending',\n  timedOut\n} }];"
+      },
+      "id": "node-13b",
+      "name": "Evaluate ASIN Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2720, 40]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "ac1", "leftValue": "={{ $json.statusLabel }}", "rightValue": "done", "operator": { "type": "string", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-14",
+      "name": "ASIN Run Finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2940, 40]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "as1", "leftValue": "={{ $json.runStatus }}", "rightValue": "SUCCEEDED", "operator": { "type": "string", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-15",
+      "name": "ASIN Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3160, 40]
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ '❌ ASIN collection failed\\nStatus: *' + $json.runStatus + '*\\nRun ID: `' + $json.runId + '`' }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "node-16",
+      "name": "Notify ASIN Failed",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [3380, 200],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.apify.com/v2/actor-runs/' + $json.runId + '/dataset/items?limit=5000' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "node-17",
+      "name": "Fetch ASIN Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3380, -100],
+      "credentials": { "httpHeaderAuth": { "id": "2", "name": "Apify API Key" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const items = $('Fetch ASIN Results').item.json;\nconst prev = $('ASIN Succeeded?').first().json;\nconst staticData = $getWorkflowStaticData('global');\nconst chatId = prev.chatId;\n\nconst asins = [];\nconst asinSet = new Set();\nconst rawItems = Array.isArray(items) ? items : (items?.items || []);\n\nfor (const item of rawItems) {\n  const asin = item.asin || item.id || item.productAsin;\n  if (asin && /^[A-Z0-9]{10}$/.test(asin) && !asinSet.has(asin)) {\n    asinSet.add(asin);\n    asins.push({\n      asin,\n      title: item.title || item.name || '',\n      category: item.userData?.categoryName || item.categoryName || '',\n      categoryPath: item.userData?.categoryPath || item.categoryPath || ''\n    });\n  }\n}\n\nstaticData[chatId] = {\n  asins,\n  asinCount: asins.length,\n  marketplace: prev.marketplace,\n  categoryQuery: prev.query,\n  categories: prev.categories,\n  collectedAt: new Date().toISOString()\n};\n\nreturn [{ json: { chatId, asinCount: asins.length, marketplace: prev.marketplace, query: prev.query, categories: prev.categories, previewAsins: asins.slice(0, 5) } }];"
+      },
+      "id": "node-18",
+      "name": "Store ASINs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3600, -100]
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ '✅ *ASIN Collection Complete!*\\n\\n📦 ASINs collected: *' + $json.asinCount + '*\\n🌍 Marketplace: *' + $json.marketplace + '*\\n📂 Categories: *' + ($json.categories || []).length + '*\\n\\n*Preview:*\\n' + ($json.previewAsins || []).map(a => '• `' + a.asin + '` — ' + (a.category || 'N/A')).join('\\n') + '\\n\\n➡️ Send `scrape sellers` to start scraping seller data.' }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "node-19",
+      "name": "Notify ASINs Done",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [3820, -100],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst chatId = $('Parse Message').item.json.chatId;\nconst session = staticData[chatId] || {};\nconst asinCount = (session.asins || []).length;\nreturn [{ json: { ...session, chatId, asinCount } }];"
+      },
+      "id": "node-20",
+      "name": "Load Session State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 800]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "ha1", "leftValue": "={{ $json.asinCount }}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-21",
+      "name": "Has Stored ASINs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 800]
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "❌ No ASINs found in session.\n\nPlease collect ASINs first:\n`collect asins Baby Accessories ES`\n\nThen send `scrape sellers` again.",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "node-22",
+      "name": "No ASINs Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1180, 960],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ '🔎 Starting seller data scraping...\\n\\n📦 ASINs to process: *' + $json.asinCount + '*\\n🌍 Marketplace: *' + ($json.marketplace || 'ES') + '*\\n📂 Category: *' + ($json.categoryQuery || 'N/A') + '*\\n\\n_This may take 10–30 minutes. I\\'ll notify you when done._' }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "node-23",
+      "name": "Notify Seller Starting",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1180, 660],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const session = $('Load Session State').item.json;\nconst marketplace = session.marketplace || 'ES';\nconst MP_COUNTRIES = { ES: 'ES', UK: 'GB', DE: 'DE', FR: 'FR', IT: 'IT' };\nconst country = MP_COUNTRIES[marketplace] || 'ES';\nconst asinList = (session.asins || []).map(a => a.asin);\nreturn [{ json: {\n  actorInput: { asins: asinList, country },\n  marketplace, chatId: session.chatId,\n  categoryQuery: session.categoryQuery,\n  categories: session.categories || [],\n  asins: session.asins || []\n} }];"
+      },
+      "id": "node-23b",
+      "name": "Build Seller Actor Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 660]
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/pintostudio~amazon-seller-info-scraper/runs",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify($json.actorInput) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "node-24",
+      "name": "Start Seller Actor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1620, 660],
+      "credentials": { "httpHeaderAuth": { "id": "2", "name": "Apify API Key" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const runData = $('Start Seller Actor').item.json;\nconst prev = $('Build Seller Actor Input').item.json;\nconst runId = runData?.data?.id;\nif (!runId) throw new Error('Apify did not return a seller run ID: ' + JSON.stringify(runData));\nreturn [{ json: { runId, marketplace: prev.marketplace, chatId: prev.chatId, categoryQuery: prev.categoryQuery, categories: prev.categories, asins: prev.asins, pollCount: 0 } }];"
+      },
+      "id": "node-24b",
+      "name": "Extract Seller Run ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1840, 660]
+    },
+
+    {
+      "parameters": { "amount": 60, "unit": "seconds" },
+      "id": "node-26",
+      "name": "Wait 60s — Seller",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2060, 660]
+    },
+
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.apify.com/v2/actor-runs/' + $json.runId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "node-27",
+      "name": "Check Seller Run Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2280, 660],
+      "credentials": { "httpHeaderAuth": { "id": "2", "name": "Apify API Key" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const runStatus = $('Check Seller Run Status').item.json?.data?.status || 'UNKNOWN';\nconst ctx = $('Wait 60s — Seller').item.json;\nconst pollCount = (ctx.pollCount || 0) + 1;\nconst timedOut = pollCount >= 60;\nconst isDone = ['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'].includes(runStatus) || timedOut;\nreturn [{ json: {\n  runId: ctx.runId,\n  chatId: ctx.chatId,\n  categoryQuery: ctx.categoryQuery,\n  categories: ctx.categories,\n  asins: ctx.asins,\n  marketplace: ctx.marketplace,\n  runStatus,\n  pollCount,\n  statusLabel: isDone ? 'done' : 'pending',\n  timedOut\n} }];"
+      },
+      "id": "node-27b",
+      "name": "Evaluate Seller Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 660]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "sc1", "leftValue": "={{ $json.statusLabel }}", "rightValue": "done", "operator": { "type": "string", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-28",
+      "name": "Seller Run Finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2720, 660]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "ss1", "leftValue": "={{ $json.runStatus }}", "rightValue": "SUCCEEDED", "operator": { "type": "string", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-29",
+      "name": "Seller Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2940, 660]
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ '❌ Seller scraping failed\\nStatus: *' + $json.runStatus + '*\\nRun ID: `' + $json.runId + '`' }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "node-30",
+      "name": "Notify Seller Failed",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [3160, 820],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    },
+
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.apify.com/v2/actor-runs/' + $json.runId + '/dataset/items?limit=5000' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "node-31",
+      "name": "Fetch Seller Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3160, 520],
+      "credentials": { "httpHeaderAuth": { "id": "2", "name": "Apify API Key" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const rawItems = $('Fetch Seller Results').item.json;\nconst prev = $('Seller Succeeded?').first().json;\nconst asinMeta = {};\nfor (const a of (prev.asins || [])) asinMeta[a.asin] = { category: a.category, categoryPath: a.categoryPath };\n\nconst items = Array.isArray(rawItems) ? rawItems : (rawItems?.items || []);\n\nconst sellers = items.map(item => {\n  const asin = item.asin || item.productAsin || '';\n  const meta = asinMeta[asin] || {};\n  const pathParts = (meta.categoryPath || prev.categoryQuery || 'General').split(' > ');\n  const mainCategory = pathParts[0] || 'General';\n  const subCategory = pathParts.slice(1).join(' > ') || mainCategory;\n  return {\n    asin,\n    marketplace: item.marketplace || prev.marketplace || 'ES',\n    category: meta.category || item.category || '',\n    category_path: meta.categoryPath || '',\n    main_category: mainCategory,\n    sub_category: subCategory,\n    business_name: item.businessName || item.business_name || item.sellerName || '',\n    email: item.email || '',\n    phone: item.phone || item.phoneNumber || item.phone_number || '',\n    business_address: item.businessAddress || item.address || item.business_address || '',\n    vat_number: item.vatNumber || item.vat || item.vat_number || '',\n    status: item.error ? 'ERROR: ' + item.error : 'SUCCESS'\n  };\n});\n\nconst groups = {};\nfor (const s of sellers) {\n  const key = s.main_category + '|||' + s.sub_category;\n  if (!groups[key]) groups[key] = { mainCategory: s.main_category, subCategory: s.sub_category, rows: [] };\n  groups[key].rows.push(s);\n}\n\nreturn [{ json: {\n  sellers,\n  groups: Object.values(groups),\n  totalSellers: sellers.length,\n  chatId: prev.chatId,\n  marketplace: prev.marketplace,\n  categoryQuery: prev.categoryQuery\n} }];"
+      },
+      "id": "node-32",
+      "name": "Process Seller Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3380, 520]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst groups = data.groups || [];\nif (groups.length === 0) {\n  return [{ json: { ...data, mainCategory: 'General', subCategory: 'General', rows: data.sellers || [] } }];\n}\nreturn groups.map(g => ({ json: { ...g, chatId: data.chatId, marketplace: data.marketplace, categoryQuery: data.categoryQuery, totalSellers: data.totalSellers } }));"
+      },
+      "id": "node-32b",
+      "name": "Split by Category Group",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3600, 520]
+    },
+
+    {
+      "parameters": {
+        "resource": "folder",
+        "operation": "create",
+        "name": "={{ $json.mainCategory }}",
+        "options": {}
+      },
+      "id": "node-35",
+      "name": "Create Main Category Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [3820, 520],
+      "credentials": { "googleDriveOAuth2Api": { "id": "3", "name": "Google Drive" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const mainFolderId = $input.first().json.id;\nconst groupData = $('Split by Category Group').item.json;\nreturn [{ json: { ...groupData, mainFolderId } }];"
+      },
+      "id": "node-36b",
+      "name": "Attach Main Folder ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4040, 520]
+    },
+
+    {
+      "parameters": {
+        "resource": "folder",
+        "operation": "create",
+        "name": "={{ $json.subCategory }}",
+        "driveId": { "mode": "list", "value": "myDrive" },
+        "folderId": { "mode": "id", "value": "={{ $json.mainFolderId }}" },
+        "options": {}
+      },
+      "id": "node-39",
+      "name": "Create Sub Category Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [4260, 520],
+      "credentials": { "googleDriveOAuth2Api": { "id": "3", "name": "Google Drive" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const subFolderId = $input.first().json.id;\nconst groupData = $('Attach Main Folder ID').item.json;\nreturn [{ json: { ...groupData, subFolderId } }];"
+      },
+      "id": "node-40b",
+      "name": "Attach Sub Folder ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4480, 520]
+    },
+
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "create",
+        "title": "={{ $json.subCategory + ' — Seller Data ' + new Date().toISOString().split('T')[0] }}",
+        "sheetsUi": { "sheetValues": [{ "title": "Sellers" }] }
+      },
+      "id": "node-41",
+      "name": "Create Spreadsheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [4700, 520],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "4", "name": "Google Sheets" } }
+    },
+
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "move",
+        "fileId": { "__rl": true, "mode": "id", "value": "={{ $json.spreadsheetId }}" },
+        "folderId": { "__rl": true, "mode": "id", "value": "={{ $('Attach Sub Folder ID').item.json.subFolderId }}" },
+        "options": {}
+      },
+      "id": "node-42",
+      "name": "Move Sheet to Sub Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [4920, 520],
+      "credentials": { "googleDriveOAuth2Api": { "id": "3", "name": "Google Drive" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const spreadsheetId = $('Create Spreadsheet').item.json.spreadsheetId;\nconst groupData = $('Attach Sub Folder ID').item.json;\nconst rows = groupData.rows || [];\n\nif (rows.length === 0) {\n  return [{ json: { spreadsheetId, isEmpty: true, chatId: groupData.chatId, mainCategory: groupData.mainCategory, subCategory: groupData.subCategory, totalSellers: groupData.totalSellers, marketplace: groupData.marketplace } }];\n}\n\nreturn rows.map(row => ({\n  json: {\n    spreadsheetId,\n    chatId: groupData.chatId,\n    mainCategory: groupData.mainCategory,\n    subCategory: groupData.subCategory,\n    totalSellers: groupData.totalSellers,\n    marketplace: groupData.marketplace,\n    ASIN: row.asin,\n    Marketplace: row.marketplace,\n    Category: row.category,\n    'Category Path': row.category_path,\n    'Business Name': row.business_name,\n    Email: row.email,\n    Phone: row.phone,\n    'Business Address': row.business_address,\n    'VAT Number': row.vat_number,\n    Status: row.status\n  }\n}));"
+      },
+      "id": "node-42b",
+      "name": "Prepare Sheet Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5140, 520]
+    },
+
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "documentId": { "__rl": true, "mode": "id", "value": "={{ $json.spreadsheetId }}" },
+        "sheetName": { "__rl": true, "mode": "name", "value": "Sellers" },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": { "headerRow": true }
+      },
+      "id": "node-43",
+      "name": "Write Rows to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [5360, 520],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "4", "name": "Google Sheets" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst first = items[0]?.json || {};\nreturn [{ json: {\n  chatId: first.chatId,\n  totalSellers: first.totalSellers,\n  marketplace: first.marketplace,\n  mainCategory: first.mainCategory,\n  subCategory: first.subCategory,\n  spreadsheetId: first.spreadsheetId\n} }];"
+      },
+      "id": "node-43b",
+      "name": "Build Final Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5580, 520]
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ '✅ *Seller Scraping Complete!*\\n\\n📊 Sellers found: *' + $json.totalSellers + '*\\n🌍 Marketplace: *' + $json.marketplace + '*\\n\\n📁 *Saved to Google Drive:*\\n📂 ' + $json.mainCategory + '\\n   📂 ' + $json.subCategory + '\\n      📊 Seller Data Sheet\\n\\nOpen Google Drive to view your data.' }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "node-44",
+      "name": "Notify Scraping Done",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [5800, 520],
+      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+    }
+
+  ],
+
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{ "node": "Parse Message", "type": "main", "index": 0 }]]
+    },
+    "Parse Message": {
+      "main": [[{ "node": "Route by Intent", "type": "main", "index": 0 }]]
+    },
+    "Route by Intent": {
+      "main": [
+        [{ "node": "Fetch Browse Nodes", "type": "main", "index": 0 }],
+        [{ "node": "Load Session State", "type": "main", "index": 0 }],
+        [{ "node": "Send Status", "type": "main", "index": 0 }],
+        [{ "node": "Send Help", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Browse Nodes": {
+      "main": [[{ "node": "Find Matching Nodes", "type": "main", "index": 0 }]]
+    },
+    "Find Matching Nodes": {
+      "main": [[{ "node": "Has Matching Nodes?", "type": "main", "index": 0 }]]
+    },
+    "Has Matching Nodes?": {
+      "main": [
+        [{ "node": "Notify Collection Starting", "type": "main", "index": 0 }],
+        [{ "node": "No Categories Found", "type": "main", "index": 0 }]
+      ]
+    },
+    "Notify Collection Starting": {
+      "main": [[{ "node": "Build ASIN Actor Input", "type": "main", "index": 0 }]]
+    },
+    "Build ASIN Actor Input": {
+      "main": [[{ "node": "Start ASIN Actor", "type": "main", "index": 0 }]]
+    },
+    "Start ASIN Actor": {
+      "main": [[{ "node": "Extract ASIN Run ID", "type": "main", "index": 0 }]]
+    },
+    "Extract ASIN Run ID": {
+      "main": [[{ "node": "Wait 45s — ASIN", "type": "main", "index": 0 }]]
+    },
+    "Wait 45s — ASIN": {
+      "main": [[{ "node": "Check ASIN Run Status", "type": "main", "index": 0 }]]
+    },
+    "Check ASIN Run Status": {
+      "main": [[{ "node": "Evaluate ASIN Status", "type": "main", "index": 0 }]]
+    },
+    "Evaluate ASIN Status": {
+      "main": [[{ "node": "ASIN Run Finished?", "type": "main", "index": 0 }]]
+    },
+    "ASIN Run Finished?": {
+      "main": [
+        [{ "node": "ASIN Succeeded?", "type": "main", "index": 0 }],
+        [{ "node": "Wait 45s — ASIN", "type": "main", "index": 0 }]
+      ]
+    },
+    "ASIN Succeeded?": {
+      "main": [
+        [{ "node": "Fetch ASIN Results", "type": "main", "index": 0 }],
+        [{ "node": "Notify ASIN Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch ASIN Results": {
+      "main": [[{ "node": "Store ASINs", "type": "main", "index": 0 }]]
+    },
+    "Store ASINs": {
+      "main": [[{ "node": "Notify ASINs Done", "type": "main", "index": 0 }]]
+    },
+    "Load Session State": {
+      "main": [[{ "node": "Has Stored ASINs?", "type": "main", "index": 0 }]]
+    },
+    "Has Stored ASINs?": {
+      "main": [
+        [{ "node": "Notify Seller Starting", "type": "main", "index": 0 }],
+        [{ "node": "No ASINs Message", "type": "main", "index": 0 }]
+      ]
+    },
+    "Notify Seller Starting": {
+      "main": [[{ "node": "Build Seller Actor Input", "type": "main", "index": 0 }]]
+    },
+    "Build Seller Actor Input": {
+      "main": [[{ "node": "Start Seller Actor", "type": "main", "index": 0 }]]
+    },
+    "Start Seller Actor": {
+      "main": [[{ "node": "Extract Seller Run ID", "type": "main", "index": 0 }]]
+    },
+    "Extract Seller Run ID": {
+      "main": [[{ "node": "Wait 60s — Seller", "type": "main", "index": 0 }]]
+    },
+    "Wait 60s — Seller": {
+      "main": [[{ "node": "Check Seller Run Status", "type": "main", "index": 0 }]]
+    },
+    "Check Seller Run Status": {
+      "main": [[{ "node": "Evaluate Seller Status", "type": "main", "index": 0 }]]
+    },
+    "Evaluate Seller Status": {
+      "main": [[{ "node": "Seller Run Finished?", "type": "main", "index": 0 }]]
+    },
+    "Seller Run Finished?": {
+      "main": [
+        [{ "node": "Seller Succeeded?", "type": "main", "index": 0 }],
+        [{ "node": "Wait 60s — Seller", "type": "main", "index": 0 }]
+      ]
+    },
+    "Seller Succeeded?": {
+      "main": [
+        [{ "node": "Fetch Seller Results", "type": "main", "index": 0 }],
+        [{ "node": "Notify Seller Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Seller Results": {
+      "main": [[{ "node": "Process Seller Data", "type": "main", "index": 0 }]]
+    },
+    "Process Seller Data": {
+      "main": [[{ "node": "Split by Category Group", "type": "main", "index": 0 }]]
+    },
+    "Split by Category Group": {
+      "main": [[{ "node": "Create Main Category Folder", "type": "main", "index": 0 }]]
+    },
+    "Create Main Category Folder": {
+      "main": [[{ "node": "Attach Main Folder ID", "type": "main", "index": 0 }]]
+    },
+    "Attach Main Folder ID": {
+      "main": [[{ "node": "Create Sub Category Folder", "type": "main", "index": 0 }]]
+    },
+    "Create Sub Category Folder": {
+      "main": [[{ "node": "Attach Sub Folder ID", "type": "main", "index": 0 }]]
+    },
+    "Attach Sub Folder ID": {
+      "main": [[{ "node": "Create Spreadsheet", "type": "main", "index": 0 }]]
+    },
+    "Create Spreadsheet": {
+      "main": [[{ "node": "Move Sheet to Sub Folder", "type": "main", "index": 0 }]]
+    },
+    "Move Sheet to Sub Folder": {
+      "main": [[{ "node": "Prepare Sheet Rows", "type": "main", "index": 0 }]]
+    },
+    "Prepare Sheet Rows": {
+      "main": [[{ "node": "Write Rows to Sheet", "type": "main", "index": 0 }]]
+    },
+    "Write Rows to Sheet": {
+      "main": [[{ "node": "Build Final Summary", "type": "main", "index": 0 }]]
+    },
+    "Build Final Summary": {
+      "main": [[{ "node": "Notify Scraping Done", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "2",
+  "meta": { "templateCredsSetupCompleted": false },
+  "id": "amazon-seller-intel-telegram",
+  "tags": [{ "name": "Amazon Seller Intel" }]
+}

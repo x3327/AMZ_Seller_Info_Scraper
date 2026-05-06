@@ -334,12 +334,15 @@ async function runAsinCollectionAgent(collectRunId, selectedNodeIds, marketplace
       });
 
       try {
-        const run = await apifyRunActor(ACTOR_ASIN_COLLECTOR, {
+        const actorInput = {
           categoryOrProductUrls: [{ url: categoryUrl }],
           proxyCountry: config.country,
-          maxItems: maxPerCategory,
           scrapeSellers: false,
-        });
+        };
+        // maxPerCategory === 0 means unlimited — omit maxItems so Apify crawls all pages
+        if (maxPerCategory > 0) actorInput.maxItems = maxPerCategory;
+
+        const run = await apifyRunActor(ACTOR_ASIN_COLLECTOR, actorInput);
 
         const items = await apifyWaitAndFetch(run.id);
         const found = extractAsinsFromItems(items);
