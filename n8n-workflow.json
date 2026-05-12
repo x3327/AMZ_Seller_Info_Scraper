@@ -13,21 +13,22 @@
 
     {
       "parameters": {
-        "updates": ["message"],
-        "additionalFields": {}
+        "httpMethod": "POST",
+        "path": "amazon-seller-intel-bot",
+        "responseMode": "onReceived",
+        "options": {}
       },
       "id": "node-01",
       "name": "Telegram Trigger",
-      "type": "n8n-nodes-base.telegramTrigger",
-      "typeVersion": 1.1,
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
       "position": [80, 320],
-      "webhookId": "amazon-seller-intel-bot",
-      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+      "webhookId": "amazon-seller-intel-bot"
     },
 
     {
       "parameters": {
-        "jsCode": "const msg = $input.first().json.message;\nconst text = (msg?.text || '').trim();\nconst chatId = String(msg?.chat?.id || '');\nconst staticData = $getWorkflowStaticData('global');\n\nlet intent = 'help';\nlet categoryQuery = '';\nlet marketplace = 'ES';\nlet maxItems = 200; // default\n\nif (/collect\\s*asin|scrape\\s*asin|get\\s*asin|start\\s*asin|find\\s*asin/i.test(text)) {\n  intent = 'collect_asins';\n\n  // Extract maxItems: number like 500, or 'unlimited' / 'all'\n  const unlimitedMatch = /\\b(unlimited|all|no.?limit)\\b/i.test(text);\n  const numMatch = text.match(/\\b(\\d{2,5})\\b/);\n  if (unlimitedMatch) {\n    maxItems = 0; // 0 = unlimited\n  } else if (numMatch) {\n    maxItems = parseInt(numMatch[1]);\n  }\n\n  categoryQuery = text\n    .replace(/collect\\s*asins?|scrape\\s*asins?|get\\s*asins?|start\\s*asin\\s*collection|find\\s*asins?/gi, '')\n    .replace(/\\bfrom\\b|\\bof\\b|\\bfor\\b|\\bin\\b/gi, '')\n    .replace(/\\b(ES|UK|DE|FR|IT)\\b/gi, '')\n    .replace(/\\b(unlimited|all|no.?limit)\\b/gi, '')\n    .replace(/\\b\\d{2,5}\\b/g, '')\n    .replace(/[>]/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n} else if (/scrape\\s*seller|seller\\s*data|seller\\s*info|start\\s*seller|seller\\s*scrap/i.test(text)) {\n  intent = 'scrape_sellers';\n} else if (/status|progress/i.test(text)) {\n  intent = 'status';\n}\n\nconst mpMatch = text.match(/\\b(ES|UK|DE|FR|IT)\\b/i);\nif (mpMatch) marketplace = mpMatch[1].toUpperCase();\n\nconst session = staticData[chatId] || {};\n\nreturn [{ json: { intent, categoryQuery, marketplace, maxItems, chatId, originalText: text, session } }];"
+        "jsCode": "const raw = $input.first().json;\nconst msg = raw.message ?? raw.body?.message;\nconst text = (msg?.text || '').trim();\nconst chatId = String(msg?.chat?.id || '');\nconst staticData = $getWorkflowStaticData('global');\n\nlet intent = 'help';\nlet categoryQuery = '';\nlet marketplace = 'ES';\nlet maxItems = 200; // default\n\nif (/collect\\s*asin|scrape\\s*asin|get\\s*asin|start\\s*asin|find\\s*asin/i.test(text)) {\n  intent = 'collect_asins';\n\n  // Extract maxItems: number like 500, or 'unlimited' / 'all'\n  const unlimitedMatch = /\\b(unlimited|all|no.?limit)\\b/i.test(text);\n  const numMatch = text.match(/\\b(\\d{2,5})\\b/);\n  if (unlimitedMatch) {\n    maxItems = 0; // 0 = unlimited\n  } else if (numMatch) {\n    maxItems = parseInt(numMatch[1]);\n  }\n\n  categoryQuery = text\n    .replace(/collect\\s*asins?|scrape\\s*asins?|get\\s*asins?|start\\s*asin\\s*collection|find\\s*asins?/gi, '')\n    .replace(/\\bfrom\\b|\\bof\\b|\\bfor\\b|\\bin\\b/gi, '')\n    .replace(/\\b(ES|UK|DE|FR|IT)\\b/gi, '')\n    .replace(/\\b(unlimited|all|no.?limit)\\b/gi, '')\n    .replace(/\\b\\d{2,5}\\b/g, '')\n    .replace(/[>]/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n} else if (/scrape\\s*seller|seller\\s*data|seller\\s*info|start\\s*seller|seller\\s*scrap/i.test(text)) {\n  intent = 'scrape_sellers';\n} else if (/status|progress/i.test(text)) {\n  intent = 'status';\n}\n\nconst mpMatch = text.match(/\\b(ES|UK|DE|FR|IT)\\b/i);\nif (mpMatch) marketplace = mpMatch[1].toUpperCase();\n\nconst session = staticData[chatId] || {};\n\nreturn [{ json: { intent, categoryQuery, marketplace, maxItems, chatId, originalText: text, session } }];"
       },
       "id": "node-02",
       "name": "Parse Message",
@@ -89,7 +90,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [740, 500],
-      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+      "credentials": { "telegramApi": { "id": "Nue1SxFooNebUxWr", "name": "Telegram account" } }
     },
 
     {
@@ -103,7 +104,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [740, 640],
-      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+      "credentials": { "telegramApi": { "id": "Nue1SxFooNebUxWr", "name": "Telegram account" } }
     },
 
     {
@@ -157,7 +158,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [1400, 300],
-      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+      "credentials": { "telegramApi": { "id": "Nue1SxFooNebUxWr", "name": "Telegram account" } }
     },
 
     {
@@ -171,12 +172,12 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [1400, 40],
-      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+      "credentials": { "telegramApi": { "id": "Nue1SxFooNebUxWr", "name": "Telegram account" } }
     },
 
     {
       "parameters": {
-        "jsCode": "const { matched, marketplace, chatId, query, maxItems } = $('Find Matching Nodes').item.json;\n\n// ── Change this URL when deployed to Cloud Run ──────────────────────\nconst SCRAPER_API_URL = 'http://localhost:8080';\n// ────────────────────────────────────────────────────────────────────\n\nconst MP_DOMAINS = { ES: 'amazon.es', UK: 'amazon.co.uk', DE: 'amazon.de', FR: 'amazon.fr', IT: 'amazon.it' };\nconst domain = MP_DOMAINS[marketplace] || 'amazon.es';\nconst mpLower = marketplace.toLowerCase() === 'uk' ? 'co.uk' : marketplace.toLowerCase();\n\nlet categoryUrls = matched.map(n => ({\n  url: 'https://www.' + domain + '/s?rh=n:' + n.nodes[marketplace] + '&language=en',\n  category_name: n.name,\n  category_path: n.path\n}));\n\n// Limit categories — each yields ~20 items max\nif (maxItems > 0) {\n  const maxCats = Math.max(1, Math.ceil(maxItems / 20));\n  categoryUrls = categoryUrls.slice(0, maxCats);\n}\n\nconst apiRequest = {\n  category_urls: categoryUrls,\n  marketplace: mpLower,\n  max_items: maxItems || 0\n};\n\nreturn [{ json: {\n  apiRequest,\n  apiUrl: SCRAPER_API_URL + '/get-asins',\n  marketplace, chatId, query, maxItems,\n  categoryCount: matched.length,\n  categories: matched.map(n => ({ id: n.id, name: n.name, path: n.path }))\n} }];"
+        "jsCode": "const { matched, marketplace, chatId, query, maxItems } = $('Find Matching Nodes').item.json;\n\n// ── Change this URL when deployed to Cloud Run ──────────────────────\nconst SCRAPER_API_URL = 'http://127.0.0.1:8080';\n// ────────────────────────────────────────────────────────────────────\n\nconst MP_DOMAINS = { ES: 'amazon.es', UK: 'amazon.co.uk', DE: 'amazon.de', FR: 'amazon.fr', IT: 'amazon.it' };\nconst domain = MP_DOMAINS[marketplace] || 'amazon.es';\nconst mpLower = marketplace.toLowerCase() === 'uk' ? 'co.uk' : marketplace.toLowerCase();\n\n// Build keyword-based search URLs (more reliable than browse node ?rh=n: format)\n// Each matched category gets a targeted search: \"<userQuery> <categoryName>\"\nlet categoryUrls = matched.map(n => {\n  const catName = (n.name || '').replace(/[^a-zA-Z0-9\\s]/g, ' ').trim();\n  const searchTerm = catName && catName.toLowerCase() !== query.toLowerCase()\n    ? query + ' ' + catName\n    : query;\n  return {\n    url: 'https://www.' + domain + '/s?k=' + encodeURIComponent(searchTerm) + '&language=en',\n    category_name: n.name,\n    category_path: n.path\n  };\n});\n\n// Deduplicate search URLs (multiple categories may yield same keyword combo)\nconst seenUrls = new Set();\ncategoryUrls = categoryUrls.filter(c => {\n  if (seenUrls.has(c.url)) return false;\n  seenUrls.add(c.url);\n  return true;\n});\n\n// Limit categories — each yields ~20 items max\nif (maxItems > 0) {\n  const maxCats = Math.max(1, Math.ceil(maxItems / 20));\n  categoryUrls = categoryUrls.slice(0, maxCats);\n}\n\nconst apiRequest = {\n  category_urls: categoryUrls,\n  marketplace: mpLower,\n  max_items: maxItems || 0\n};\n\nreturn [{ json: {\n  apiRequest,\n  apiUrl: SCRAPER_API_URL + '/get-asins',\n  marketplace, chatId, query, maxItems,\n  categoryCount: matched.length,\n  categories: matched.map(n => ({ id: n.id, name: n.name, path: n.path }))\n} }];"
       },
       "id": "node-09b",
       "name": "Build ASIN Actor Input",
@@ -193,7 +194,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.apiRequest) }}",
+        "jsonBody": "={{ $json.apiRequest }}",
         "options": { "timeout": 3600000 }
       },
       "id": "node-10",
@@ -201,7 +202,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1840, 40],
-      "credentials": { "httpHeaderAuth": { "id": "5", "name": "Scraper API Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "vySxyxlm7MdcnfD0", "name": "Header Auth account 2" } }
     },
 
     {
@@ -237,7 +238,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [2500, 40],
-      "credentials": { "httpHeaderAuth": { "id": "2", "name": "Apify API Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "ApifyPlaceholder", "name": "Apify API Key" } }
     },
 
     {
@@ -294,7 +295,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [3380, 200],
-      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+      "credentials": { "telegramApi": { "id": "Nue1SxFooNebUxWr", "name": "Telegram account" } }
     },
 
     {
@@ -310,12 +311,12 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [3380, -100],
-      "credentials": { "httpHeaderAuth": { "id": "2", "name": "Apify API Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "ApifyPlaceholder", "name": "Apify API Key" } }
     },
 
     {
       "parameters": {
-        "jsCode": "// Parse response from custom scraper API (/get-asins)\nconst apiResponse = $('Start ASIN Actor').item.json;\nconst prev = $('Build ASIN Actor Input').item.json;\nconst chatId = prev.chatId;\nconst maxItems = prev.maxItems || 0;\n\n// API returns { status, total, asins: [...] }\nlet rawAsins = [];\nif (Array.isArray(apiResponse.asins)) {\n  rawAsins = apiResponse.asins;\n} else if (Array.isArray(apiResponse)) {\n  rawAsins = apiResponse;\n}\n\nconst allAsins = [];\nconst asinSet = new Set();\n\nfor (const item of rawAsins) {\n  const asin = String(item.asin || '').trim().toUpperCase();\n  if (asin && asin.length >= 8 && !asinSet.has(asin)) {\n    asinSet.add(asin);\n    allAsins.push({\n      asin,\n      title: item.title || '',\n      category: item.category || item.category_name || '',\n      categoryPath: item.category_path || ''\n    });\n  }\n}\n\nconst asins = (maxItems > 0) ? allAsins.slice(0, maxItems) : allAsins;\n\nreturn [{ json: {\n  chatId,\n  asinsJson: JSON.stringify(asins),\n  asinCount: asins.length,\n  maxItems,\n  marketplace: prev.marketplace,\n  categoryQuery: prev.query,\n  collectedAt: new Date().toISOString(),\n  previewAsins: asins.slice(0, 5)\n} }];"
+        "jsCode": "// Parse response from custom scraper API (/get-asins)\nconst raw = $('Start ASIN Actor').item.json;\nconst prev = $('Build ASIN Actor Input').item.json;\nconst chatId = prev.chatId;\nconst maxItems = prev.maxItems || 0;\n\n// Unwrap response — handle: top-level, body-wrapped, data-wrapped\nconst apiResponse = (raw && typeof raw === 'object' && !Array.isArray(raw) && raw.body)\n  ? raw.body\n  : (raw && typeof raw === 'object' && !Array.isArray(raw) && raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data) && raw.data.asins)\n    ? raw.data\n    : raw;\n\n// API returns { status, total, asins: [...] }\nlet rawAsins = [];\nif (Array.isArray(apiResponse)) {\n  rawAsins = apiResponse;\n} else if (apiResponse && Array.isArray(apiResponse.asins)) {\n  rawAsins = apiResponse.asins;\n} else if (apiResponse && Array.isArray(apiResponse.results)) {\n  rawAsins = apiResponse.results;\n} else if (apiResponse && Array.isArray(apiResponse.items)) {\n  rawAsins = apiResponse.items;\n}\n\nconst allAsins = [];\nconst asinSet = new Set();\n\nfor (const item of rawAsins) {\n  const asin = String(item.asin || item.ASIN || '').trim().toUpperCase();\n  if (asin && asin.length >= 8 && !asinSet.has(asin)) {\n    asinSet.add(asin);\n    allAsins.push({\n      asin,\n      title: item.title || item.product_title || '',\n      category: item.category || item.category_name || '',\n      categoryPath: item.category_path || item.categoryPath || ''\n    });\n  }\n}\n\nconst asins = (maxItems > 0) ? allAsins.slice(0, maxItems) : allAsins;\n\nconst sessionData = {\n  asinsJson: JSON.stringify(asins),\n  asinCount: asins.length,\n  marketplace: prev.marketplace,\n  categoryQuery: prev.query,\n  collectedAt: new Date().toISOString()\n};\n\n// ── Persist session in workflow static data (survives between executions) ──\nconst staticData = $getWorkflowStaticData('global');\nstaticData[chatId] = sessionData;\n\n// Debug: log raw response shape for troubleshooting\nconst debugInfo = {\n  rawKeys: raw ? Object.keys(raw) : [],\n  apiRespKeys: (apiResponse && typeof apiResponse === 'object' && !Array.isArray(apiResponse)) ? Object.keys(apiResponse) : [],\n  rawAsinsLen: rawAsins.length,\n  rawType: typeof apiResponse\n};\n\nreturn [{ json: {\n  chatId,\n  ...sessionData,\n  maxItems,\n  previewAsins: asins.slice(0, 5),\n  debugInfo\n} }];"
       },
       "id": "node-18",
       "name": "Store ASINs",
@@ -357,7 +358,8 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
       "position": [3820, -100],
-      "credentials": { "googleSheetsOAuth2Api": { "id": "4", "name": "Google Sheets" } }
+      "continueOnFail": true,
+      "credentials": { "googleSheetsOAuth2Api": { "id": "O6x9XKbdZgPPnRPs", "name": "Google Sheets account" } }
 
     },
 
@@ -372,7 +374,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [4040, -100],
-      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+      "credentials": { "telegramApi": { "id": "Nue1SxFooNebUxWr", "name": "Telegram account" } }
     },
 
     {
@@ -390,12 +392,12 @@
       "typeVersion": 4.4,
       "position": [740, 800],
       "continueOnFail": true,
-      "credentials": { "googleSheetsOAuth2Api": { "id": "4", "name": "Google Sheets" } }
+      "credentials": { "googleSheetsOAuth2Api": { "id": "O6x9XKbdZgPPnRPs", "name": "Google Sheets account" } }
     },
 
     {
       "parameters": {
-        "jsCode": "const rows = $input.all();\nconst chatId = $('Parse Message').item.json.chatId;\n\n// Find all rows matching this chatId, take the last (most recent)\nconst matching = rows\n  .map(r => r.json)\n  .filter(r => String(r.chatId || '').trim() === String(chatId).trim());\n\nif (matching.length === 0) {\n  return [{ json: { asins: [], asinCount: 0, chatId, marketplace: '', categoryQuery: '' } }];\n}\n\nconst latest = matching[matching.length - 1];\nlet asins = [];\ntry { asins = JSON.parse(latest.asinsJson || '[]'); } catch(e) { asins = []; }\n\nreturn [{ json: {\n  asins,\n  asinCount: asins.length,\n  marketplace: latest.marketplace || '',\n  categoryQuery: latest.categoryQuery || '',\n  chatId\n} }];"
+        "jsCode": "// Read session from workflow static data (written by Store ASINs node)\nconst chatId = $('Parse Message').item.json.chatId;\nconst staticData = $getWorkflowStaticData('global');\nconst session = staticData[chatId];\n\nif (!session || !session.asinsJson) {\n  return [{ json: { asins: [], asinCount: 0, chatId, marketplace: '', categoryQuery: '' } }];\n}\n\nlet asins = [];\ntry { asins = JSON.parse(session.asinsJson || '[]'); } catch(e) { asins = []; }\n\nreturn [{ json: {\n  asins,\n  asinCount: asins.length,\n  marketplace: session.marketplace || '',\n  categoryQuery: session.categoryQuery || '',\n  chatId\n} }];"
       },
       "id": "node-20b",
       "name": "Parse Loaded Session",
@@ -431,7 +433,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [1180, 960],
-      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+      "credentials": { "telegramApi": { "id": "Nue1SxFooNebUxWr", "name": "Telegram account" } }
     },
 
     {
@@ -445,12 +447,12 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [1180, 660],
-      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+      "credentials": { "telegramApi": { "id": "Nue1SxFooNebUxWr", "name": "Telegram account" } }
     },
 
     {
       "parameters": {
-        "jsCode": "const session = $('Parse Loaded Session').item.json;\nconst marketplace = session.marketplace || 'ES';\n\n// ── Change this URL when deployed to Cloud Run ──────────────────────\nconst SCRAPER_API_URL = 'http://localhost:8080';\n// ────────────────────────────────────────────────────────────────────\n\nconst mpLower = marketplace.toLowerCase() === 'uk' ? 'co.uk' : marketplace.toLowerCase();\nconst asins = session.asins || [];\n\nconst apiRequest = {\n  asins: asins.map(a => ({\n    asin: a.asin,\n    category: a.category || '',\n    category_path: a.categoryPath || ''\n  })),\n  marketplace: mpLower\n};\n\nreturn [{ json: {\n  apiRequest,\n  apiUrl: SCRAPER_API_URL + '/scrape-from-asins',\n  marketplace, chatId: session.chatId,\n  categoryQuery: session.categoryQuery,\n  categories: session.categories || [],\n  asins\n} }];"
+        "jsCode": "const session = $('Parse Loaded Session').item.json;\nconst marketplace = session.marketplace || 'ES';\n\n// ── Change this URL when deployed to Cloud Run ──────────────────────\nconst SCRAPER_API_URL = 'http://127.0.0.1:8080';\n// ────────────────────────────────────────────────────────────────────\n\nconst mpLower = marketplace.toLowerCase() === 'uk' ? 'co.uk' : marketplace.toLowerCase();\nconst asins = session.asins || [];\n\nconst apiRequest = {\n  asins: asins.map(a => ({\n    asin: a.asin,\n    category: a.category || '',\n    category_path: a.categoryPath || ''\n  })),\n  marketplace: mpLower\n};\n\nreturn [{ json: {\n  apiRequest,\n  apiUrl: SCRAPER_API_URL + '/scrape-from-asins',\n  marketplace, chatId: session.chatId,\n  categoryQuery: session.categoryQuery,\n  categories: session.categories || [],\n  asins\n} }];"
       },
       "id": "node-23b",
       "name": "Build Seller Actor Input",
@@ -467,7 +469,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.apiRequest) }}",
+        "jsonBody": "={{ $json.apiRequest }}",
         "options": { "timeout": 3600000 }
       },
       "id": "node-24",
@@ -475,7 +477,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1620, 660],
-      "credentials": { "httpHeaderAuth": { "id": "5", "name": "Scraper API Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "vySxyxlm7MdcnfD0", "name": "Header Auth account 2" } }
     },
 
     {
@@ -511,7 +513,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [2280, 660],
-      "credentials": { "httpHeaderAuth": { "id": "2", "name": "Apify API Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "ApifyPlaceholder", "name": "Apify API Key" } }
     },
 
     {
@@ -568,7 +570,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [3160, 820],
-      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+      "credentials": { "telegramApi": { "id": "Nue1SxFooNebUxWr", "name": "Telegram account" } }
     },
 
     {
@@ -584,7 +586,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [3160, 520],
-      "credentials": { "httpHeaderAuth": { "id": "2", "name": "Apify API Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "ApifyPlaceholder", "name": "Apify API Key" } }
     },
 
     {
@@ -621,7 +623,7 @@
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [3820, 520],
-      "credentials": { "googleDriveOAuth2Api": { "id": "3", "name": "Google Drive" } }
+      "credentials": { "googleDriveOAuth2Api": { "id": "mAJ3VVU6ebQAJiWB", "name": "Google Drive account" } }
     },
 
     {
@@ -649,7 +651,7 @@
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [4260, 520],
-      "credentials": { "googleDriveOAuth2Api": { "id": "3", "name": "Google Drive" } }
+      "credentials": { "googleDriveOAuth2Api": { "id": "mAJ3VVU6ebQAJiWB", "name": "Google Drive account" } }
     },
 
     {
@@ -675,7 +677,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
       "position": [4700, 520],
-      "credentials": { "googleSheetsOAuth2Api": { "id": "4", "name": "Google Sheets" } }
+      "credentials": { "googleSheetsOAuth2Api": { "id": "O6x9XKbdZgPPnRPs", "name": "Google Sheets account" } }
     },
 
     {
@@ -691,7 +693,7 @@
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [4920, 520],
-      "credentials": { "googleDriveOAuth2Api": { "id": "3", "name": "Google Drive" } }
+      "credentials": { "googleDriveOAuth2Api": { "id": "mAJ3VVU6ebQAJiWB", "name": "Google Drive account" } }
     },
 
     {
@@ -724,7 +726,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
       "position": [5360, 520],
-      "credentials": { "googleSheetsOAuth2Api": { "id": "4", "name": "Google Sheets" } }
+      "credentials": { "googleSheetsOAuth2Api": { "id": "O6x9XKbdZgPPnRPs", "name": "Google Sheets account" } }
     },
 
     {
@@ -749,7 +751,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [5800, 520],
-      "credentials": { "telegramApi": { "id": "1", "name": "Telegram Bot" } }
+      "credentials": { "telegramApi": { "id": "Nue1SxFooNebUxWr", "name": "Telegram account" } }
     }
 
   ],
@@ -764,7 +766,7 @@
     "Route by Intent": {
       "main": [
         [{ "node": "Fetch Browse Nodes", "type": "main", "index": 0 }],
-        [{ "node": "Load Session from Sheets", "type": "main", "index": 0 }],
+        [{ "node": "Parse Loaded Session", "type": "main", "index": 0 }],
         [{ "node": "Send Status", "type": "main", "index": 0 }],
         [{ "node": "Send Help", "type": "main", "index": 0 }]
       ]
@@ -795,9 +797,6 @@
     },
     "Save Session to Sheets": {
       "main": [[{ "node": "Notify ASINs Done", "type": "main", "index": 0 }]]
-    },
-    "Load Session from Sheets": {
-      "main": [[{ "node": "Parse Loaded Session", "type": "main", "index": 0 }]]
     },
     "Parse Loaded Session": {
       "main": [[{ "node": "Has Stored ASINs?", "type": "main", "index": 0 }]]
