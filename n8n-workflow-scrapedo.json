@@ -1,0 +1,143 @@
+{
+  "name": "Amazon Seller Scraper — Scrape.do + Custom API",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-e5f6-7890-ab12-ef1234560001",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-01",
+              "name": "scrapeDoToken",
+              "value": "60337f3075804f778fd03112fb1e4c5caf0bdb40c4b",
+              "type": "string"
+            },
+            {
+              "id": "cfg-02",
+              "name": "marketplace",
+              "value": "es",
+              "type": "string"
+            },
+            {
+              "id": "cfg-03",
+              "name": "keywords",
+              "value": "furniture,electronics,kitchen tools",
+              "type": "string"
+            },
+            {
+              "id": "cfg-04",
+              "name": "maxPerKeyword",
+              "value": "50",
+              "type": "string"
+            },
+            {
+              "id": "cfg-05",
+              "name": "scraperUrl",
+              "value": "http://localhost:8080",
+              "type": "string"
+            },
+            {
+              "id": "cfg-06",
+              "name": "scraperApiKey",
+              "value": "insider7-ResProx04",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7890-ab12-ef1234560002",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Step 1: Collect ASINs from Amazon search pages via scrape.do ─────────────────────\n// API: http://api.scrape.do/?url={encoded}&token={tok}&super=true&regionalGeoCode=europe\nconst cfg  = $input.first().json;\nconst tok  = cfg.scrapeDoToken;\nconst mp   = cfg.marketplace;\nconst kwds = cfg.keywords.split(',').map(k => k.trim()).filter(Boolean);\nconst maxN = parseInt(cfg.maxPerKeyword) || 50;\n\nconst DOMAINS = {\n  'es':'amazon.es', 'de':'amazon.de', 'fr':'amazon.fr', 'it':'amazon.it',\n  'co.uk':'amazon.co.uk', 'com':'amazon.com', 'ca':'amazon.ca', 'mx':'amazon.com.mx'\n};\n// scrape.do regionalGeoCode values for search API\nconst GEO_REGION = {\n  'es':'europe', 'de':'europe', 'fr':'europe', 'it':'europe', 'co.uk':'europe',\n  'com':'north_america', 'ca':'north_america', 'mx':'latin_america'\n};\n// scrape.do geocode values for PDP plugin\nconst GEO_CODE = {\n  'es':'es', 'de':'de', 'fr':'fr', 'it':'it',\n  'co.uk':'gb', 'com':'us', 'ca':'ca', 'mx':'mx'\n};\n// Default zipcodes required by PDP plugin per marketplace\nconst ZIPCODE = {\n  'es':'28001', 'de':'10115', 'fr':'75001', 'it':'00187',\n  'co.uk':'SW1A1AA', 'com':'10001', 'ca':'M5V3A8', 'mx':'06600'\n};\nconst dom     = DOMAINS[mp]    || 'amazon.es';\nconst geoReg  = GEO_REGION[mp] || 'europe';\nconst geoCode = GEO_CODE[mp]   || 'es';\nconst zipcode = ZIPCODE[mp]    || '28001';\nconst lang    = mp !== 'co.uk' ? '&language=en' : '';\n\nconst seen = new Set();\nconst out  = [];\n\nfor (const kw of kwds) {\n  const searchUrl = `https://www.${dom}/s?k=${encodeURIComponent(kw)}${lang}`;\n  const qs = new URLSearchParams({\n    url:             searchUrl,\n    token:           tok,\n    super:           'true',\n    regionalGeoCode: geoReg,\n  }).toString();\n\n  console.log(`[ASIN] keyword=${kw}  url=${searchUrl}`);\n\n  try {\n    const html  = await this.helpers.httpRequest({ method: 'GET', url: `http://api.scrape.do/?${qs}` });\n    const str   = typeof html === 'string' ? html : JSON.stringify(html);\n    const parts = str.split('data-asin=');\n    let cnt = 0;\n\n    for (let i = 1; i < parts.length && cnt < maxN; i++) {\n      const asin = parts[i].slice(1, 11);\n      if (/^[A-Z0-9]{10}$/.test(asin) && !seen.has(asin)) {\n        seen.add(asin);\n        out.push({ asin, keyword: kw, marketplace: mp, domain: dom, token: tok, geoCode, zipcode, scraperUrl: cfg.scraperUrl, scraperApiKey: cfg.scraperApiKey });\n        cnt++;\n      }\n    }\n    console.log(`[ASIN] ${cnt} found for \"${kw}\"`);\n  } catch (e) {\n    console.error(`[ASIN] Failed for \"${kw}\": ${e.message}`);\n  }\n}\n\nconsole.log(`[ASIN] Total unique ASINs: ${out.length}`);\nreturn out.map(r => ({ json: r }));",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "a1b2c3d4-e5f6-7890-ab12-ef1234560003",
+      "name": "1 — Collect ASINs (Scrape.do Search)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Step 2: Filter Amazon-sold products via scrape.do PDP plugin ─────────────────────\n// PDP plugin: https://api.scrape.do/plugin/amazon/pdp\n// Required params: token, asin, geocode, zipcode\n// Returns structured JSON — we only use sold_by to detect Amazon-sold items.\n// Non-Amazon ASINs are passed to our custom scraper in step 3.\nconst items   = $input.all();\nconst results = [];\n\nconsole.log(`[PDP] Filtering ${items.length} ASINs for Amazon-sold...`);\n\nfor (const it of items) {\n  const { asin, marketplace: mp, domain: dom, token: tok, geoCode, zipcode, scraperUrl, scraperApiKey } = it.json;\n\n  const qs = new URLSearchParams({\n    token:   tok,\n    asin:    asin,\n    geocode: geoCode,\n    zipcode: zipcode,\n  }).toString();\n\n  console.log(`[PDP] ASIN: ${asin}  geocode=${geoCode}  zipcode=${zipcode}`);\n\n  try {\n    let data = await this.helpers.httpRequest({\n      method: 'GET',\n      url: `https://api.scrape.do/plugin/amazon/pdp?${qs}`,\n    });\n\n    if (typeof data === 'string') { try { data = JSON.parse(data); } catch (_) {} }\n\n    const soldBy     = String(data.sold_by || data.soldBy || data.seller?.name || '').toLowerCase();\n    const amazonSold = soldBy.includes('amazon') || data.soldByAmazon === true;\n    const sellerName = data.sold_by || data.soldBy || 'unknown';\n    const productName = String(data.name || '').slice(0, 60);\n\n    if (amazonSold) {\n      console.log(`[PDP] ${asin} → sold by Amazon (\"${sellerName}\") — SKIP`);\n    } else if (data.error) {\n      console.warn(`[PDP] ${asin} → error: ${data.error} — passing through anyway`);\n      results.push({ json: { asin, seller_name: 'unknown', marketplace: mp, scraperUrl, scraperApiKey } });\n    } else {\n      console.log(`[PDP] ${asin} → 3P seller: \"${sellerName}\"  product: ${productName}`);\n      results.push({ json: { asin, seller_name: sellerName, marketplace: mp, scraperUrl, scraperApiKey } });\n    }\n\n  } catch (e) {\n    console.error(`[PDP] ${asin} failed: ${e.message} — passing through anyway`);\n    results.push({ json: { asin, seller_name: 'unknown', marketplace: mp, scraperUrl, scraperApiKey } });\n  }\n}\n\nconsole.log(`[PDP] ${results.length} non-Amazon ASINs to scrape`);\nreturn results;",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "a1b2c3d4-e5f6-7890-ab12-ef1234560004",
+      "name": "2 — Filter Amazon-sold (Scrape.do PDP Plugin)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Step 3: Scrape full seller info via local custom scraper ─────────────────────────\n// POST {scraperUrl}/scrape-from-asins — batches up to 50 ASINs per call.\n// Returns: seller_id, business_name, VAT number, email, phone, address.\n// NOTE: scraperUrl must be reachable from where n8n runs (e.g. http://localhost:8080).\nconst items = $input.all();\nif (!items.length) { console.log('[SCRAPER] No ASINs to scrape'); return []; }\n\nconst BATCH_SIZE = 50;\n\n// Group by marketplace\nconst byMp = {};\nfor (const it of items) {\n  const { asin, seller_name, marketplace: mp, scraperUrl, scraperApiKey } = it.json;\n  if (!byMp[mp]) byMp[mp] = { mp, scraperUrl, scraperApiKey, asins: [] };\n  byMp[mp].asins.push({ asin, category: seller_name || '', category_path: '' });\n}\n\nconst allResults = [];\n\nfor (const [mpKey, grp] of Object.entries(byMp)) {\n  const { asins, scraperUrl, scraperApiKey } = grp;\n  const totalBatches = Math.ceil(asins.length / BATCH_SIZE);\n\n  for (let i = 0; i < asins.length; i += BATCH_SIZE) {\n    const batch     = asins.slice(i, i + BATCH_SIZE);\n    const batchNum  = Math.floor(i / BATCH_SIZE) + 1;\n\n    console.log(`[SCRAPER] ${mpKey} batch ${batchNum}/${totalBatches} — ${batch.length} ASINs`);\n    console.log(`[SCRAPER] ASINs: ${batch.map(a => a.asin).join(', ')}`);\n\n    try {\n      let resp = await this.helpers.httpRequest({\n        method:  'POST',\n        url:     `${scraperUrl}/scrape-from-asins`,\n        headers: { 'x-api-key': scraperApiKey, 'Content-Type': 'application/json' },\n        body:    JSON.stringify({ asins: batch, marketplace: mpKey }),\n        timeout: 1800000,\n      });\n      if (typeof resp === 'string') resp = JSON.parse(resp);\n\n      const results = resp.results || [];\n      const ok = results.filter(r => r.status === 'success').length;\n      console.log(`[SCRAPER] batch ${batchNum}: ${ok}/${results.length} success`);\n\n      for (const r of results) {\n        allResults.push({\n          json: {\n            asin:           r.asin           || '',\n            seller_id:      r.seller_id      || '',\n            marketplace:    r.marketplace    || mpKey,\n            status:         r.status         || '',\n            business_name:  r.business_name  || '',\n            email:          r.email          || '',\n            phone:          r.phone          || '',\n            vat_number:     r.vat_number     || '',\n            address:        r.address || r.raw_info || '',\n            storefront_url: r.storefront_url || '',\n            seller_rating:  r.rating         || '',\n            category:       r.category       || '',\n            error:          r.error          || '',\n          },\n        });\n      }\n    } catch (e) {\n      console.error(`[SCRAPER] ${mpKey} batch ${batchNum} failed: ${e.message}`);\n      for (const a of batch) {\n        allResults.push({ json: { asin: a.asin, marketplace: mpKey, status: 'error', error: e.message } });\n      }\n    }\n  }\n}\n\nconsole.log(`[SCRAPER] Total results: ${allResults.length}`);\nreturn allResults;",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "a1b2c3d4-e5f6-7890-ab12-ef1234560005",
+      "name": "3 — Scrape Seller Info (Custom Local API)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "results",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7890-ab12-ef1234560006",
+      "name": "Aggregate Final Results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [1440, 300]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [{ "node": "Config", "type": "main", "index": 0 }]
+      ]
+    },
+    "Config": {
+      "main": [
+        [{ "node": "1 — Collect ASINs (Scrape.do Search)", "type": "main", "index": 0 }]
+      ]
+    },
+    "1 — Collect ASINs (Scrape.do Search)": {
+      "main": [
+        [{ "node": "2 — Filter Amazon-sold (Scrape.do PDP Plugin)", "type": "main", "index": 0 }]
+      ]
+    },
+    "2 — Filter Amazon-sold (Scrape.do PDP Plugin)": {
+      "main": [
+        [{ "node": "3 — Scrape Seller Info (Custom Local API)", "type": "main", "index": 0 }]
+      ]
+    },
+    "3 — Scrape Seller Info (Custom Local API)": {
+      "main": [
+        [{ "node": "Aggregate Final Results", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "amazon-scrapedo-seller-workflow-v1",
+  "meta": {
+    "instanceId": "local"
+  }
+}
